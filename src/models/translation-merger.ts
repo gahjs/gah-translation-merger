@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { GahPlugin, GahEvent, GahPluginConfig } from '@awdware/gah';
+import { GahPlugin, GahEvent, GahPluginConfig } from '@awdware/gah-shared';
 
 import { TranslationManagerConfig } from './translation-manager-config';
 import { TranslationCollection } from './translation-collection';

@@ -1,4 +1,4 @@
-import { GahPluginConfig } from '@awdware/gah';
+import { GahPluginConfig } from '@awdware/gah-shared';
 
 export class TranslationManagerConfig extends GahPluginConfig {
   public searchGlobPattern: string;
