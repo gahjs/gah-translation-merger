@@ -6,6 +6,9 @@ import { TranslationManagerConfig } from './translation-manager-config';
 import { TranslationCollection } from './translation-collection';
 
 export class TranslationMerger extends GahPlugin {
+  constructor() {
+    super('TranslationMerger');
+  }
 
   protected async onInstall(existingCfg: TranslationManagerConfig): Promise<GahPluginConfig> {
     const newCfg = new TranslationManagerConfig();
@@ -26,7 +29,7 @@ export class TranslationMerger extends GahPlugin {
   }
 
   onInit() {
-    this.registerEventListener('TranslationMerger', GahEvent.INSTALL_FINISHED, () => {
+    this.registerEventListener(GahEvent.INSTALL_FINISHED, () => {
       const cfg = this.config as TranslationManagerConfig;
 
       if (!cfg)
