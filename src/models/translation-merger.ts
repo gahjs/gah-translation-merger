@@ -14,13 +14,15 @@ export class TranslationMerger extends GahPlugin {
     const newCfg = new TranslationManagerConfig();
 
     newCfg.searchGlobPattern = await this.promptService.input({
-      msg: 'Please enter a globbing path to the json translation files (eg. src/assets/**/translations/*.json)',
+      msg: 'Please enter a globbing path to the json translation files',
+      default: 'src/assets/**/translations/*.json',
       enabled: () => !(existingCfg?.searchGlobPattern),
       cancelled: false,
       validator: (val: string) => val.endsWith('.json')
     }) ?? existingCfg.searchGlobPattern;
     newCfg.destinationPath = await this.promptService.input({
-      msg: 'Please enter the destination path for the merged translation files (eg src/assets/i18n)',
+      msg: 'Please enter the destination path for the merged translation files',
+      default: 'src/assets/i18n',
       enabled: () => !(existingCfg?.destinationPath),
       cancelled: false
     }) ?? existingCfg.destinationPath;
