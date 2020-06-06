@@ -42,7 +42,7 @@ export class TranslationMerger extends GahPlugin {
       if (!cfg.destinationPath)
         throw new Error('Missing Setting: destinationPath');
 
-      const allTranslationFiles = this.fileSystemService.getFilesFromGlob(cfg.searchGlobPattern);
+      const allTranslationFiles = this.fileSystemService.getFilesFromGlob(cfg.searchGlobPattern, ['node_modules'], true);
 
       const translationCollection = new Array<TranslationCollection>();
 
