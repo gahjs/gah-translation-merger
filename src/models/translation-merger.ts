@@ -42,7 +42,7 @@ export class TranslationMerger extends GahPlugin {
       if (!cfg.destinationPath)
         throw new Error('Missing Setting: destinationPath');
 
-      const allTranslationFiles = this.fileSystemService.getFilesFromGlob(cfg.searchGlobPattern, ['node_modules'], true);
+      const allTranslationFiles = this.fileSystemService.getFilesFromGlob('.gah/' + cfg.searchGlobPattern, ['node_modules'], true);
 
       const translationCollection = new Array<TranslationCollection>();
 
@@ -59,10 +59,10 @@ export class TranslationMerger extends GahPlugin {
         trans.translations = { ...trans.translations, ...parsedContent };
       });
 
-      this.fileSystemService.ensureDirectory(cfg.destinationPath);
+      this.fileSystemService.ensureDirectory(path.join('.gah', cfg.destinationPath));
 
       translationCollection.forEach(x => {
-        const filePath = path.join(cfg.destinationPath, x.local);
+        const filePath = path.join('.gah', cfg.destinationPath, x.local);
         this.fileSystemService.saveObjectToFile(filePath, x.translations, true);
       });
     });
