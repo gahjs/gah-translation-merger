@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { GahPlugin, GahEvent, GahPluginConfig } from '@awdware/gah-shared';
+import { GahPlugin, GahEvent, GahPluginConfig, AssetsBaseStylesCopiedEvent } from '@awdware/gah-shared';
 
 import { TranslationManagerConfig } from './translation-manager-config';
 import { TranslationCollection } from './translation-collection';
@@ -31,9 +31,12 @@ export class TranslationMerger extends GahPlugin {
   }
 
   onInit() {
-    this.registerEventListener(GahEvent.INSTALL_FINISHED, () => {
-      const cfg = this.config as TranslationManagerConfig;
+    this.registerEventListener(GahEvent.ASSETS_BASE_STYLES_COPIED, (event: AssetsBaseStylesCopiedEvent) => {
+      const name = event.module?.isHost ? this.fileSystemService.directoryName(event.module.basePath.substr(0, event.module.basePath.length - 4)) : event.module?.moduleName;
 
+      this.loggerService.log('Merging translation files for ' + name);
+
+      const cfg = this.config as TranslationManagerConfig;
       if (!cfg)
         throw new Error('Plugin settings have not been provided.');
 
@@ -65,6 +68,7 @@ export class TranslationMerger extends GahPlugin {
         const filePath = path.join('.gah', cfg.destinationPath, x.local);
         this.fileSystemService.saveObjectToFile(filePath, x.translations, true);
       });
+      this.loggerService.success('Translation files merged successfully!');
     });
   }
 }
