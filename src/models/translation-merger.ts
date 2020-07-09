@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { GahPlugin, GahEvent, GahPluginConfig, AssetsBaseStylesCopiedEvent } from '@awdware/gah-shared';
+import { GahPlugin, GahPluginConfig } from '@awdware/gah-shared';
 
 import { TranslationManagerConfig } from './translation-manager-config';
 import { TranslationCollection } from './translation-collection';
@@ -10,28 +10,26 @@ export class TranslationMerger extends GahPlugin {
     super('TranslationMerger');
   }
 
-  protected async onInstall(existingCfg: TranslationManagerConfig): Promise<GahPluginConfig> {
+  public async onInstall(existingCfg: TranslationManagerConfig): Promise<GahPluginConfig> {
     const newCfg = new TranslationManagerConfig();
 
     newCfg.searchGlobPattern = await this.promptService.input({
       msg: 'Please enter a globbing path to the json translation files',
       default: 'src/assets/**/translations/*.json',
       enabled: () => !(existingCfg?.searchGlobPattern),
-      cancelled: false,
       validator: (val: string) => val.endsWith('.json')
     }) ?? existingCfg.searchGlobPattern;
     newCfg.destinationPath = await this.promptService.input({
       msg: 'Please enter the destination path for the merged translation files',
       default: 'src/assets/i18n',
       enabled: () => !(existingCfg?.destinationPath),
-      cancelled: false
     }) ?? existingCfg.destinationPath;
 
     return newCfg;
   }
 
-  onInit() {
-    this.registerEventListener(GahEvent.ASSETS_BASE_STYLES_COPIED, (event: AssetsBaseStylesCopiedEvent) => {
+  public onInit() {
+    this.registerEventListener('ASSETS_BASE_STYLES_COPIED', (event) => {
       const name = event.module?.isHost ? this.fileSystemService.directoryName(event.module.basePath.substr(0, event.module.basePath.length - 4)) : event.module?.moduleName;
 
       this.loggerService.log('Merging translation files for ' + name);
