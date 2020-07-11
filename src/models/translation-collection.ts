@@ -1,6 +1,6 @@
 
 export class TranslationCollection {
-  public local: string;
+  public locale: string;
   public translations: any;
 
   constructor() {
