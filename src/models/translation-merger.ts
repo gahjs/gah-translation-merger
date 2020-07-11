@@ -36,7 +36,7 @@ export class TranslationMerger extends GahPlugin {
   }
 
   public onInit() {
-    this.registerEventListener('ASSETS_BASE_STYLES_COPIED', (event) => {
+    this.registerEventListener('ASSETS_COPIED', (event) => {
       const name = event.module?.isHost ? this.fileSystemService.directoryName(event.module.basePath) : event.module?.moduleName;
 
       this.loggerService.log('Merging translation files for ' + name);
