@@ -25,12 +25,18 @@ export class TranslationMerger extends GahPlugin {
       enabled: () => !(existingCfg?.destinationPath),
     }) ?? existingCfg.destinationPath;
     // .*\.(\w+)\.json
-    newCfg.matchPattern = await this.promptService.input({
+    newCfg.localeRegexPattern = await this.promptService.input({
       msg: 'Please enter a regex that has one matching group that matches the locale of the filename. leave empty for matching the whole filename'
-        + ' Example: ".*\\.(\\w+)\\.json" anything that is a word character before the .json path has to match',
+        +  ' See https://github.com/awdware/gah-translation-merger for a detailed documentation',
       default: '',
-      enabled: () => !(existingCfg?.matchPattern),
-    }) ?? existingCfg.matchPattern;
+      enabled: () => !(existingCfg?.localeRegexPattern),
+    }) ?? existingCfg.localeRegexPattern;
+    newCfg.prefixRegexPattern = await this.promptService.input({
+      msg: 'Please enter a regex that has one matching group that matches the prefix (of the final translation file) within the filename. leave empty for no prefix'
+        + ' See https://github.com/awdware/gah-translation-merger for a detailed documentation',
+      default: '',
+      enabled: () => !(existingCfg?.prefixRegexPattern),
+    }) ?? existingCfg.prefixRegexPattern;
 
     return newCfg;
   }
@@ -58,13 +64,25 @@ export class TranslationMerger extends GahPlugin {
 
       allTranslationFiles.forEach(x => {
         let locale: string;
-        if (cfg.matchPattern) {
-          const localeRegex = new RegExp(cfg.matchPattern);
-          const match = path.basename(x).match(localeRegex);
-          if (!match || !(match?.[1])) {
+        let prefix: string | undefined = undefined;
+        if (cfg.localeRegexPattern) {
+          const localeRegex = new RegExp(cfg.localeRegexPattern);
+          const localeMatch = path.basename(x).match(localeRegex);
+          if (!localeMatch || !(localeMatch?.[1])) {
             throw new Error('The locale matcher did not fine the locale in the filename: ' + path.basename(x));
           }
-          locale = match[1];
+          locale = localeMatch[1];
+
+          if(cfg.prefixRegexPattern) {
+            const prefixRegex = new RegExp(cfg.prefixRegexPattern);
+            const prefixMatch = path.basename(x).match(prefixRegex);
+            if (!prefixMatch || !(prefixMatch?.[1])) {
+              throw new Error('The prefix matcher did not fine the prefix in the filename: ' + path.basename(x));
+            }
+            prefix = prefixMatch[1];
+  
+          }
+
         } else {
           locale = path.basename(x).replace(/\.json$/, '');
         }
@@ -79,7 +97,11 @@ export class TranslationMerger extends GahPlugin {
           translationCollection.push(trans);
         }
         const parsedContent = JSON.parse(content);
-        trans.translations = { ...trans.translations, ...parsedContent };
+        if(prefix) {
+          trans.translations[prefix] = parsedContent;
+        } else {
+          trans.translations = { ...trans.translations, ...parsedContent };
+        }
       });
 
       this.fileSystemService.ensureDirectory(path.join('.gah', cfg.destinationPath));
