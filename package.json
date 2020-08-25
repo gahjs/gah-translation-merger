@@ -1,6 +1,6 @@
 {
   "name": "@awdware/gah-translation-merger",
-  "version": "0.0.22",
+  "version": "0.0.23",
   "description": "Merging multiple tranlation files into one during install step of GAH-CLI",
   "main": "./lib/index.js",
   "scripts": {
@@ -13,7 +13,7 @@
   "license": "MIT",
   "private": false,
   "dependencies": {
-    "@awdware/gah-shared": "^0.0.42"
+    "@awdware/gah-shared": "^0.0.43"
   },
   "devDependencies": {
     "@awdware/eslint-config-nodejs": "^0.0.6",
