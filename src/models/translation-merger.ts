@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { GahModuleType, GahPlugin, GahPluginConfig } from '@awdware/gah-shared';
+import { GahModuleType, GahPlugin, GahPluginConfig } from '@gah/shared';
 
 import { TranslationManagerConfig } from './translation-manager-config';
 import { TranslationCollection } from './translation-collection';
@@ -42,8 +42,8 @@ export class TranslationMerger extends GahPlugin {
   }
 
   registerCommands() {
-    this.registerCommandHandler('i18n', () => {
-      const moduleType = this.configurationService.getGahModuleType();
+    this.registerCommandHandler('i18n', async () => {
+      const moduleType = await this.configurationService.getGahModuleType();
       if (moduleType === GahModuleType.MODULE || GahModuleType.UNKNOWN) {
         this.loggerService.error('This command can only be executed in gah host folders');
         return false;
@@ -56,16 +56,16 @@ export class TranslationMerger extends GahPlugin {
 
   public onInit() {
     this.registerCommands();
-    this.registerEventListener('ASSETS_COPIED', (event) => {
+    this.registerEventListener('AFTER_COPY_ASSETS', async (event) => {
       if (!event.module?.isHost) {
         return;
       }
       const name = this.fileSystemService.directoryName(event.module.basePath);
-      this.mergeTranslations(name);
+      await this.mergeTranslations(name);
     });
   }
 
-  private mergeTranslations(name: string | undefined) {
+  private async mergeTranslations(name: string | undefined) {
     this.loggerService.log(`Merging translation files for ${name}`);
 
     const cfg = this.config as TranslationManagerConfig;
@@ -74,63 +74,63 @@ export class TranslationMerger extends GahPlugin {
     if (!cfg.searchGlobPattern) { throw new Error('Missing Setting: searchGlobPattern'); }
     if (!cfg.destinationPath) { throw new Error('Missing Setting: destinationPath'); }
 
-    const allTranslationFiles = this.fileSystemService.getFilesFromGlob(`.gah/${cfg.searchGlobPattern}`, ['node_modules'], true);
+    const allTranslationFiles = await this.fileSystemService.getFilesFromGlob(`.gah/${cfg.searchGlobPattern}`, ['node_modules'], true);
 
     this.loggerService.debug(`Found translation files:${allTranslationFiles.join(', ')}`);
 
     const destinationPath = this.fileSystemService.join('.gah', cfg.destinationPath);
     const translationCollection = new Array<TranslationCollection>();
 
-    allTranslationFiles
-      .filter(x => !x.startsWith(destinationPath))
-      .forEach(x => {
-        let locale: string;
-        let prefix: string | undefined = undefined;
-        if (cfg.localeRegexPattern) {
-          const localeRegex = new RegExp(cfg.localeRegexPattern);
-          const localeMatch = path.basename(x).match(localeRegex);
-          if (!localeMatch || !(localeMatch?.[1])) {
-            throw new Error(`The locale matcher did not find the locale in the filename: ${path.basename(x)}`);
+    const filteredTranslationFiles = allTranslationFiles.filter(x => !x.startsWith(destinationPath));
+    for (const file of filteredTranslationFiles) {
+      let locale: string;
+      let prefix: string | undefined = undefined;
+      if (cfg.localeRegexPattern) {
+        const localeRegex = new RegExp(cfg.localeRegexPattern);
+        const localeMatch = path.basename(file).match(localeRegex);
+        if (!localeMatch || !(localeMatch?.[1])) {
+          throw new Error(`The locale matcher did not find the locale in the filename: ${path.basename(file)}`);
+        }
+        locale = localeMatch[1];
+
+        if (cfg.prefixRegexPattern) {
+          const prefixRegex = new RegExp(cfg.prefixRegexPattern);
+          const prefixMatch = path.basename(file).match(prefixRegex);
+          if (!prefixMatch || !(prefixMatch?.[1])) {
+            throw new Error(`The prefix matcher did not find the prefix in the filename: ${path.basename(file)}`);
           }
-          locale = localeMatch[1];
+          prefix = prefixMatch[1];
 
-          if (cfg.prefixRegexPattern) {
-            const prefixRegex = new RegExp(cfg.prefixRegexPattern);
-            const prefixMatch = path.basename(x).match(prefixRegex);
-            if (!prefixMatch || !(prefixMatch?.[1])) {
-              throw new Error(`The prefix matcher did not find the prefix in the filename: ${path.basename(x)}`);
-            }
-            prefix = prefixMatch[1];
-
-          }
-
-        } else {
-          locale = path.basename(x).replace(/\.json$/, '');
         }
 
-        this.loggerService.debug(`Found locale: "${locale}" for: "${x}"`);
+      } else {
+        locale = path.basename(file).replace(/\.json$/, '');
+      }
 
-        const content = this.fileSystemService.readFile(x);
-        let trans = translationCollection.find(x => x.locale === locale);
-        if (!trans) {
-          trans = new TranslationCollection();
-          trans.locale = locale;
-          translationCollection.push(trans);
-        }
-        const parsedContent = JSON.parse(content);
-        if (prefix) {
-          trans.translations[prefix] = parsedContent;
-        } else {
-          trans.translations = { ...trans.translations, ...parsedContent };
-        }
-      });
+      this.loggerService.debug(`Found locale: "${locale}" for: "${file}"`);
 
-    this.fileSystemService.ensureDirectory(destinationPath);
+      const content = await this.fileSystemService.readFile(file);
+      let trans = translationCollection.find(x => x.locale === locale);
+      if (!trans) {
+        trans = new TranslationCollection();
+        trans.locale = locale;
+        translationCollection.push(trans);
+      }
+      const parsedContent = JSON.parse(content);
+      if (prefix) {
+        trans.translations[prefix] = parsedContent;
+      } else {
+        trans.translations = { ...trans.translations, ...parsedContent };
+      }
+    }
 
-    translationCollection.forEach(x => {
+    await this.fileSystemService.ensureDirectory(destinationPath);
+
+    const savePromises = translationCollection.map(x => {
       const filePath = this.fileSystemService.join(destinationPath, `${x.locale}.json`);
-      this.fileSystemService.saveObjectToFile(filePath, x.translations, true);
+      return this.fileSystemService.saveObjectToFile(filePath, x.translations, true);
     });
+    await Promise.all(savePromises);
     this.loggerService.success('Translation files merged successfully!');
   }
 }
