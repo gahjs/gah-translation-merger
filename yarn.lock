@@ -2,17 +2,15 @@
 # yarn lockfile v1
 
 
-"@awdware/eslint-config-base@^0.0.4":
-  version "0.0.4"
-  resolved "https://registry.yarnpkg.com/@awdware/eslint-config-base/-/eslint-config-base-0.0.4.tgz#248d4175444dc05f1a92d61cb21779e1ee991c63"
-  integrity sha512-bkICaxMDBY8nUnAObIKKAaTNqqPpSepsGWWgSLv7Z8bfniM2hIHQJBvvo+rzpPa9LfWyB7lmroVPYoGFwsUKSQ==
+"@awdware/eslint-config-nodejs@^0.0.8":
+  version "0.0.8"
+  resolved "https://registry.yarnpkg.com/@awdware/eslint-config-nodejs/-/eslint-config-nodejs-0.0.8.tgz#a906ca58b09caa133d5a16d0609f84bc7dd59255"
+  integrity sha512-Kof80VqATCAC6l468FtCxC9O0fLDrMXP/J6Rq4b13U8fIgd2aVZi8XpLJKLudI8T0SpVCMJMvetNXhOVHhfAfQ==
 
-"@awdware/eslint-config-nodejs@^0.0.6":
-  version "0.0.6"
-  resolved "https://registry.yarnpkg.com/@awdware/eslint-config-nodejs/-/eslint-config-nodejs-0.0.6.tgz#f112eb5c9779659f9db166c1b21681e2eaa9dafb"
-  integrity sha512-ugp219UQJd6crL+AGQ1D3+8i6vR8vNLCRx2yG1t5/faZF7SDtQ4mGG7i3QuXHFheEmbtraTsSqBTsP1h+qob/A==
-  dependencies:
-    "@awdware/eslint-config-base" "^0.0.4"
+"@awdware/prettier-config@^0.0.2":
+  version "0.0.2"
+  resolved "https://registry.yarnpkg.com/@awdware/prettier-config/-/prettier-config-0.0.2.tgz#8fd6d59a2b78006cd93a4ae435ca1338382735e6"
+  integrity sha512-VK6SiTmFgiN27sMCOQesu70LgjBCW79FnIQrDzOF+8iZ6p6E/cJs7RPicUpSw+YnzBeRQvHIeC4pBJ//iYKnlA==
 
 "@babel/code-frame@^7.0.0":
   version "7.10.4"
