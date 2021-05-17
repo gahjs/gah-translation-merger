@@ -14,7 +14,7 @@
   "private": false,
   "prettier": "@awdware/prettier-config",
   "dependencies": {
-    "@gah/shared": "^0.6.0"
+    "@gah/shared": "^1.0.2"
   },
   "devDependencies": {
     "@awdware/eslint-config-nodejs": "^0.0.8",
