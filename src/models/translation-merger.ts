@@ -64,56 +64,64 @@ export class TranslationMerger extends GahPlugin {
     this.registerCommands();
     this.registerEventListener('AFTER_COPY_ASSETS', async event => {
       if (!event.module?.isHost) {
-        return;
+        return true;
       }
       const name = this.fileSystemService.directoryName(event.module.basePath);
-      await this.mergeTranslations(name);
+      return this.mergeTranslations(name);
     });
   }
 
-  private async mergeTranslations(name: string | undefined) {
+  private get cfg() {
+    return this.config as TranslationManagerConfig;
+  }
+
+  private async mergeTranslations(name: string | undefined): Promise<boolean> {
     this.loggerService.log(`Merging translation files for ${name}`);
 
-    const cfg = this.config as TranslationManagerConfig;
-    if (!cfg) {
-      throw new Error('Plugin settings have not been provided.');
+    if (!this.cfg) {
+      this.loggerService.error('Plugin settings have not been provided.');
+      return false;
     }
 
-    if (!cfg.searchGlobPattern) {
-      throw new Error('Missing Setting: searchGlobPattern');
+    if (!this.cfg.searchGlobPattern) {
+      this.loggerService.error('Missing Setting: searchGlobPattern');
+      return false;
     }
-    if (!cfg.destinationPath) {
-      throw new Error('Missing Setting: destinationPath');
+    if (!this.cfg.destinationPath) {
+      this.loggerService.error('Missing Setting: destinationPath');
+      return false;
     }
 
     const allTranslationFiles = await this.fileSystemService.getFilesFromGlob(
-      `.gah/${cfg.searchGlobPattern}`,
+      `.gah/${this.cfg.searchGlobPattern}`,
       ['node_modules'],
       true
     );
 
     this.loggerService.debug(`Found translation files:${allTranslationFiles.join(', ')}`);
 
-    const destinationPath = this.fileSystemService.join('.gah', cfg.destinationPath);
+    const destinationPath = this.fileSystemService.join('.gah', this.cfg.destinationPath);
     const translationCollection = new Array<TranslationCollection>();
 
     const filteredTranslationFiles = allTranslationFiles.filter(x => !x.startsWith(destinationPath));
     for (const file of filteredTranslationFiles) {
       let locale: string;
       let prefix: string | undefined = undefined;
-      if (cfg.localeRegexPattern) {
-        const localeRegex = new RegExp(cfg.localeRegexPattern);
+      if (this.cfg.localeRegexPattern) {
+        const localeRegex = new RegExp(this.cfg.localeRegexPattern);
         const localeMatch = path.basename(file).match(localeRegex);
         if (!localeMatch || !localeMatch?.[1]) {
-          throw new Error(`The locale matcher did not find the locale in the filename: ${path.basename(file)}`);
+          this.loggerService.error(`The locale matcher did not find the locale in the filename: ${path.basename(file)}`);
+          return false;
         }
         locale = localeMatch[1];
 
-        if (cfg.prefixRegexPattern) {
-          const prefixRegex = new RegExp(cfg.prefixRegexPattern);
+        if (this.cfg.prefixRegexPattern) {
+          const prefixRegex = new RegExp(this.cfg.prefixRegexPattern);
           const prefixMatch = path.basename(file).match(prefixRegex);
           if (!prefixMatch || !prefixMatch?.[1]) {
-            throw new Error(`The prefix matcher did not find the prefix in the filename: ${path.basename(file)}`);
+            this.loggerService.error(`The prefix matcher did not find the prefix in the filename: ${path.basename(file)}`);
+            return false;
           }
           prefix = prefixMatch[1];
         }
@@ -144,35 +152,57 @@ export class TranslationMerger extends GahPlugin {
       const keys2 = Object.keys(obj2);
       const missingKeys = keys1.filter(x => !keys2.some(y => y === x));
       res.push(...missingKeys.map(mK => path.join('.') + '.' + mK));
+
+      // Re-adding the missing keys to report further missing translation values down that branch
       keys2.push(...missingKeys);
-      const subObjects1 = keys1.map(k => (obj1 as any)[k]).filter(x => typeof x === 'object');
+      const subObjects1 = keys1
+        .map(k => {
+          return { objs: (obj1 as any)[k], key: k };
+        })
+        .filter(x => typeof x.objs === 'object');
       const subObjects2 = keys2
-        .map(k => (obj2 as any)[k])
-        .map(x => (!x ? {} : x))
-        .filter(x => typeof x === 'object');
+        .map(k => {
+          return { objs: (obj2 as any)[k] ?? {}, key: k };
+        })
+        .filter(x => typeof x.objs === 'object');
 
       for (let i = 0; i < subObjects1.length; i++) {
-        const keyInObj = Object.keys(obj1).find(key => (obj1 as any)[key] === subObjects1[i])!;
+        const keyInObj = Object.keys(obj1).find(key => (obj1 as any)[key] === subObjects1[i].objs)!;
         path.push(keyInObj);
-        getKeysMismatch(subObjects1[i], subObjects2[i], path, res);
+        getKeysMismatch(
+          subObjects1.find(x => x.key === keyInObj)!.objs,
+          subObjects2.find(x => x.key === keyInObj)!.objs,
+          path,
+          res
+        );
         path.pop();
       }
 
       return res;
     };
 
+    let foundMismatch = false;
     translationCollection.forEach(tC => {
       translationCollection.forEach(tC2 => {
         if (tC !== tC2) {
           const missingKeys = getKeysMismatch(tC.translations, tC2.translations);
           missingKeys.forEach(missingKey => {
-            this.loggerService.warn(
-              `Translation key ${missingKey} is missing from locale ${tC2.locale} but present in ${tC.path}`
-            );
+            const msg = `Translation key ${missingKey} is missing from locale ${tC2.locale} but present in ${tC.path}`;
+            if (this.cfg.translationMismatchReport === 'error') {
+              this.loggerService.error(msg);
+              foundMismatch = true;
+            } else if (this.cfg.translationMismatchReport === 'off') {
+              this.loggerService.debug(msg);
+            } else {
+              this.loggerService.warn(msg);
+            }
           });
         }
       });
     });
+    if (foundMismatch) {
+      return false;
+    }
 
     await this.fileSystemService.ensureDirectory(destinationPath);
 
@@ -182,5 +212,7 @@ export class TranslationMerger extends GahPlugin {
     });
     await Promise.all(savePromises);
     this.loggerService.success('Translation files merged successfully!');
+
+    return true;
   }
 }
