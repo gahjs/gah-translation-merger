@@ -310,7 +310,7 @@ export class TranslationMerger extends GahPlugin {
           const keySegment = missingKey[i];
           missingObj[keySegment] ??= {};
           if (i === missingKey.length - 1) {
-            missingObj[keySegment] = `### MISSING TRANSLATION: '${missingKey.join('.')}' ###`;
+            missingObj[keySegment] = `<<no translation for '${missingKey.join('.')}'>>`;
           } else {
             missingObj = missingObj[keySegment];
           }
