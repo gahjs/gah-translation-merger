@@ -151,7 +151,12 @@ export class TranslationMerger extends GahPlugin {
       const keys1 = Object.keys(obj1);
       const keys2 = Object.keys(obj2);
       const missingKeys = keys1.filter(x => !keys2.some(y => y === x));
-      res.push(...missingKeys.map(mK => path.join('.') + '.' + mK));
+
+      res.push(
+        ...missingKeys
+          .filter(mK => typeof (obj1 as any)[mK] === 'string')
+          .map(mK => (path.length > 0 ? path.join('.') + '.' : '') + mK)
+      );
 
       // Re-adding the missing keys to report further missing translation values down that branch
       keys2.push(...missingKeys);
@@ -187,7 +192,9 @@ export class TranslationMerger extends GahPlugin {
         if (tC !== tC2) {
           const missingKeys = getKeysMismatch(tC.translations, tC2.translations);
           missingKeys.forEach(missingKey => {
-            const msg = `Translation key ${missingKey} is missing from locale ${tC2.locale} but present in ${tC.path}`;
+            const msg = `Translation key '${missingKey}' is missing from locale '${tC2.locale}' but present in '${this.formatPath(
+              tC.path!
+            )}' with value '${this.getValueForKey(missingKey, tC)}'`;
             if (this.cfg.translationMismatchReport === 'error') {
               this.loggerService.error(msg);
               foundMismatch = true;
@@ -214,5 +221,21 @@ export class TranslationMerger extends GahPlugin {
     this.loggerService.success('Translation files merged successfully!');
 
     return true;
+  }
+
+  private formatPath(path: string) {
+    const shortedPath = path?.replace('.gah/src/assets/', '');
+    const pathSegments = shortedPath.split('/');
+    const res = '[' + pathSegments.splice(0, 1)[0] + ']/' + pathSegments.join('/');
+    return res;
+  }
+
+  private getValueForKey(missingKey: string, tC: TranslationCollection) {
+    const keyPath = missingKey.split('.');
+    let val: any = tC.translations;
+    for (const keyPathSegment of keyPath) {
+      val = val[keyPathSegment];
+    }
+    return val as string;
   }
 }
