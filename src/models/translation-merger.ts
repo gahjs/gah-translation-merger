@@ -119,23 +119,7 @@ export class TranslationMerger extends GahPlugin {
       return false;
     }
 
-    const mergedTranslationCollection = new Array<TranslationCollection>();
-    translationCollection.forEach(tC => {
-      let localeAlreadyKnown = false;
-      let target = mergedTranslationCollection.find(x => x.locale === tC.locale);
-      if (target) {
-        localeAlreadyKnown = true;
-      }
-      target ??= { locale: tC.locale, translations: {} };
-      if (tC.prefix) {
-        target.translations[tC.prefix] = tC.translations;
-      } else {
-        target.translations = { ...target.translations, ...tC.translations };
-      }
-      if (!localeAlreadyKnown) {
-        mergedTranslationCollection.push(target);
-      }
-    });
+    const mergedTranslationCollection = this.mergeTranslationCollectionsByLocale(translationCollection);
 
     let foundMismatch = false;
     this.findMismatches(mergedTranslationCollection, (missingKey, tc_existing, tc_missing) => {
@@ -168,6 +152,27 @@ export class TranslationMerger extends GahPlugin {
     this.loggerService.success('Translation files merged successfully!');
 
     return true;
+  }
+
+  private mergeTranslationCollectionsByLocale(translationCollection: TranslationCollection[]) {
+    const mergedTranslationCollection = new Array<TranslationCollection>();
+    translationCollection.forEach(tC => {
+      let localeAlreadyKnown = false;
+      let target = mergedTranslationCollection.find(x => x.locale === tC.locale);
+      if (target) {
+        localeAlreadyKnown = true;
+      }
+      target ??= { locale: tC.locale, translations: {} };
+      if (tC.prefix) {
+        target.translations[tC.prefix] = tC.translations;
+      } else {
+        target.translations = { ...target.translations, ...tC.translations };
+      }
+      if (!localeAlreadyKnown) {
+        mergedTranslationCollection.push(target);
+      }
+    });
+    return mergedTranslationCollection;
   }
 
   private async readTranslations(destinationPath: string) {
@@ -296,7 +301,9 @@ export class TranslationMerger extends GahPlugin {
       return false;
     }
 
-    this.findMismatches(translationCollection, (missingKey, tc_existing, tc_missing) => {
+    const mergedTranslationCollection = this.mergeTranslationCollectionsByLocale(translationCollection);
+
+    this.findMismatches(mergedTranslationCollection, (missingKey, tc_existing, tc_missing) => {
       let missingObj = tc_missing.translations;
       for (let i = 0; i < missingKey.length; i++) {
         const keySegment = missingKey[i];
@@ -309,7 +316,7 @@ export class TranslationMerger extends GahPlugin {
       }
     });
 
-    for (const tC of translationCollection) {
+    for (const tC of mergedTranslationCollection) {
       const sortedTranslations = this.sortObjectByKeys(tC.translations);
       await this.fileSystemService.saveObjectToFile(tC.path!, sortedTranslations);
     }
