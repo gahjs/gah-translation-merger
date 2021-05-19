@@ -332,7 +332,7 @@ export class TranslationMerger extends GahPlugin {
   private sortObjectByKeys(obj: any) {
     const objCopy = JSON.parse(JSON.stringify(obj));
     const keys = Object.keys(objCopy);
-    keys.sort();
+    keys.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
     const newObj: any = {};
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];
