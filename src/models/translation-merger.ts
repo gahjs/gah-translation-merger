@@ -296,8 +296,8 @@ export class TranslationMerger extends GahPlugin {
     const newObj: any = {};
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];
-      if (typeof newObj[key] === 'object') {
-        newObj[key] = this.sortObjectByKeys(newObj[key]);
+      if (typeof objCopy[key] === 'object') {
+        newObj[key] = this.sortObjectByKeys(objCopy[key]);
       } else {
         newObj[key] = objCopy[key];
       }
