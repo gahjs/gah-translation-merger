@@ -68,6 +68,16 @@ export class TranslationMerger extends GahPlugin {
       await this.fixTranslationMismatch();
       return true;
     });
+
+    this.registerCommandHandler('i18n-sort', async () => {
+      const moduleType = await this.configurationService.getGahModuleType();
+      if (moduleType === GahModuleType.MODULE || GahModuleType.UNKNOWN) {
+        this.loggerService.error('This command can only be executed in gah host folders');
+        return false;
+      }
+      await this.sortTranslationsInFiles();
+      return true;
+    });
   }
 
   public onInit() {
@@ -282,6 +292,20 @@ export class TranslationMerger extends GahPlugin {
         }
       }
     });
+
+    for (const tC of translationCollection) {
+      const sortedTranslations = this.sortObjectByKeys(tC.translations);
+      await this.fileSystemService.saveObjectToFile(tC.path!, sortedTranslations);
+    }
+  }
+
+  private async sortTranslationsInFiles() {
+    const destinationPath = this.fileSystemService.join('.gah', this.cfg.destinationPath);
+
+    const translationCollection = await this.readTranslations(destinationPath);
+    if (!translationCollection) {
+      return false;
+    }
 
     for (const tC of translationCollection) {
       const sortedTranslations = this.sortObjectByKeys(tC.translations);
