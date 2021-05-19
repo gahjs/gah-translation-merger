@@ -301,25 +301,41 @@ export class TranslationMerger extends GahPlugin {
       return false;
     }
 
-    const mergedTranslationCollection = this.mergeTranslationCollectionsByLocale(translationCollection);
+    const mergedTranslationCollections = this.matchTranslationCollectionsByPath(translationCollection);
 
-    this.findMismatches(mergedTranslationCollection, (missingKey, tc_existing, tc_missing) => {
-      let missingObj = tc_missing.translations;
-      for (let i = 0; i < missingKey.length; i++) {
-        const keySegment = missingKey[i];
-        missingObj[keySegment] ??= {};
-        if (i === missingKey.length - 1) {
-          missingObj[keySegment] = `### MISSING TRANSLATION: '${missingKey.join('.')}' ###`;
-        } else {
-          missingObj = missingObj[keySegment];
+    for (const mergedTranslationCollection of mergedTranslationCollections) {
+      this.findMismatches(mergedTranslationCollection, (missingKey, tc_existing, tc_missing) => {
+        let missingObj = tc_missing.translations;
+        for (let i = 0; i < missingKey.length; i++) {
+          const keySegment = missingKey[i];
+          missingObj[keySegment] ??= {};
+          if (i === missingKey.length - 1) {
+            missingObj[keySegment] = `### MISSING TRANSLATION: '${missingKey.join('.')}' ###`;
+          } else {
+            missingObj = missingObj[keySegment];
+          }
         }
+      });
+
+      for (const tC of mergedTranslationCollection) {
+        const sortedTranslations = this.sortObjectByKeys(tC.translations);
+        await this.fileSystemService.saveObjectToFile(tC.path!, sortedTranslations);
+      }
+    }
+  }
+  matchTranslationCollectionsByPath(translationCollection: TranslationCollection[]): TranslationCollection[][] {
+    const r = new Array<TranslationCollection[]>();
+
+    translationCollection.forEach(tC => {
+      const f = r.find(x => x.some(y => y.path === tC.path));
+      if (f) {
+        f.push(tC);
+      } else {
+        r.push([tC]);
       }
     });
 
-    for (const tC of mergedTranslationCollection) {
-      const sortedTranslations = this.sortObjectByKeys(tC.translations);
-      await this.fileSystemService.saveObjectToFile(tC.path!, sortedTranslations);
-    }
+    return r;
   }
 
   private async sortTranslationsInFiles() {
