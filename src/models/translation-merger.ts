@@ -121,8 +121,16 @@ export class TranslationMerger extends GahPlugin {
 
     const mergedTranslationCollection = new Array<TranslationCollection>();
     translationCollection.forEach(tC => {
-      const target = mergedTranslationCollection.find(x => x.locale === tC.locale) ?? { locale: tC.locale, translations: {} };
+      let localeAlreadyKnown = false;
+      let target = mergedTranslationCollection.find(x => x.locale === tC.locale);
+      if (target) {
+        localeAlreadyKnown = true;
+      }
+      target ??= { locale: tC.locale, translations: {} };
       target.translations = { ...target.translations, ...tC.translations };
+      if (!localeAlreadyKnown) {
+        mergedTranslationCollection.push(target);
+      }
     });
 
     let foundMismatch = false;
@@ -207,7 +215,7 @@ export class TranslationMerger extends GahPlugin {
       if (prefix) {
         trans.translations[prefix] = parsedContent;
       } else {
-        trans.translations = { ...trans.translations, ...parsedContent };
+        trans.translations = parsedContent;
       }
     }
     return translationCollection;
