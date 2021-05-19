@@ -119,11 +119,20 @@ export class TranslationMerger extends GahPlugin {
       return false;
     }
 
+    const mergedTranslationCollection = new Array<TranslationCollection>();
+    translationCollection.forEach(tC => {
+      const target = mergedTranslationCollection.find(x => x.locale === tC.locale) ?? { locale: tC.locale, translations: {} };
+      target.translations = { ...target.translations, ...tC.translations };
+    });
+
     let foundMismatch = false;
-    this.findMismatches(translationCollection, (missingKey, tc_existing, tc_missing) => {
+    this.findMismatches(mergedTranslationCollection, (missingKey, tc_existing, tc_missing) => {
       const msg = `Translation key '${missingKey.join('.')}' is missing from locale '${
         tc_missing.locale
-      }' but present in '${this.formatPath(tc_existing.path!)}' with value '${this.getValueForKey(missingKey, tc_existing)}'`;
+      }' but present in locale '${this.formatPath(tc_existing.locale)}' with value '${this.getValueForKey(
+        missingKey,
+        tc_existing
+      )}'`;
       if (this.cfg.translationMismatchReport === 'error') {
         this.loggerService.error(msg);
         foundMismatch = true;
@@ -139,7 +148,7 @@ export class TranslationMerger extends GahPlugin {
 
     await this.fileSystemService.ensureDirectory(destinationPath);
 
-    const savePromises = translationCollection.map(x => {
+    const savePromises = mergedTranslationCollection.map(x => {
       const filePath = this.fileSystemService.join(destinationPath, `${x.locale}.json`);
       return this.fileSystemService.saveObjectToFile(filePath, x.translations, true);
     });
@@ -189,13 +198,11 @@ export class TranslationMerger extends GahPlugin {
       this.loggerService.debug(`Found locale: "${locale}" for: "${file}"`);
 
       const content = await this.fileSystemService.readFile(file);
-      let trans = translationCollection.find(x => x.locale === locale);
-      if (!trans) {
-        trans = new TranslationCollection();
-        trans.locale = locale;
-        trans.path = file;
-        translationCollection.push(trans);
-      }
+      const trans = new TranslationCollection();
+      trans.locale = locale;
+      trans.path = file;
+      translationCollection.push(trans);
+
       const parsedContent = JSON.parse(content);
       if (prefix) {
         trans.translations[prefix] = parsedContent;
