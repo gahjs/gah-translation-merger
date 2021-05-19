@@ -58,6 +58,16 @@ export class TranslationMerger extends GahPlugin {
       this.mergeTranslations(name);
       return true;
     });
+
+    this.registerCommandHandler('i18n-fix', async () => {
+      const moduleType = await this.configurationService.getGahModuleType();
+      if (moduleType === GahModuleType.MODULE || GahModuleType.UNKNOWN) {
+        this.loggerService.error('This command can only be executed in gah host folders');
+        return false;
+      }
+      await this.fixTranslationMismatch();
+      return true;
+    });
   }
 
   public onInit() {
@@ -92,6 +102,44 @@ export class TranslationMerger extends GahPlugin {
       return false;
     }
 
+    const destinationPath = this.fileSystemService.join('.gah', this.cfg.destinationPath);
+
+    const translationCollection = await this.readTranslations(destinationPath);
+    if (!translationCollection) {
+      return false;
+    }
+
+    let foundMismatch = false;
+    this.findMismatches(translationCollection, (missingKey, tc_existing, tc_missing) => {
+      const msg = `Translation key '${missingKey.join('.')}' is missing from locale '${
+        tc_missing.locale
+      }' but present in '${this.formatPath(tc_existing.path!)}' with value '${this.getValueForKey(missingKey, tc_existing)}'`;
+      if (this.cfg.translationMismatchReport === 'error') {
+        this.loggerService.error(msg);
+        foundMismatch = true;
+      } else if (this.cfg.translationMismatchReport === 'off') {
+        this.loggerService.debug(msg);
+      } else {
+        this.loggerService.warn(msg);
+      }
+    });
+    if (foundMismatch) {
+      return false;
+    }
+
+    await this.fileSystemService.ensureDirectory(destinationPath);
+
+    const savePromises = translationCollection.map(x => {
+      const filePath = this.fileSystemService.join(destinationPath, `${x.locale}.json`);
+      return this.fileSystemService.saveObjectToFile(filePath, x.translations, true);
+    });
+    await Promise.all(savePromises);
+    this.loggerService.success('Translation files merged successfully!');
+
+    return true;
+  }
+
+  private async readTranslations(destinationPath: string) {
     const allTranslationFiles = await this.fileSystemService.getFilesFromGlob(
       `.gah/${this.cfg.searchGlobPattern}`,
       ['node_modules'],
@@ -100,7 +148,6 @@ export class TranslationMerger extends GahPlugin {
 
     this.loggerService.debug(`Found translation files:${allTranslationFiles.join(', ')}`);
 
-    const destinationPath = this.fileSystemService.join('.gah', this.cfg.destinationPath);
     const translationCollection = new Array<TranslationCollection>();
 
     const filteredTranslationFiles = allTranslationFiles.filter(x => !x.startsWith(destinationPath));
@@ -112,7 +159,7 @@ export class TranslationMerger extends GahPlugin {
         const localeMatch = path.basename(file).match(localeRegex);
         if (!localeMatch || !localeMatch?.[1]) {
           this.loggerService.error(`The locale matcher did not find the locale in the filename: ${path.basename(file)}`);
-          return false;
+          return undefined;
         }
         locale = localeMatch[1];
 
@@ -121,7 +168,7 @@ export class TranslationMerger extends GahPlugin {
           const prefixMatch = path.basename(file).match(prefixRegex);
           if (!prefixMatch || !prefixMatch?.[1]) {
             this.loggerService.error(`The prefix matcher did not find the prefix in the filename: ${path.basename(file)}`);
-            return false;
+            return undefined;
           }
           prefix = prefixMatch[1];
         }
@@ -146,77 +193,58 @@ export class TranslationMerger extends GahPlugin {
         trans.translations = { ...trans.translations, ...parsedContent };
       }
     }
+    return translationCollection;
+  }
 
-    const getKeysMismatch = (obj1: object, obj2: object, path: string[] = [], res: string[][] = []) => {
-      const keys1 = Object.keys(obj1);
-      const keys2 = Object.keys(obj2);
-      const missingKeys = keys1.filter(x => !keys2.some(y => y === x));
-
-      res.push(...missingKeys.filter(mK => typeof (obj1 as any)[mK] === 'string').map(mK => [...path, mK]));
-
-      // Re-adding the missing keys to report further missing translation values down that branch
-      keys2.push(...missingKeys);
-      const subObjects1 = keys1
-        .map(k => {
-          return { objs: (obj1 as any)[k], key: k };
-        })
-        .filter(x => typeof x.objs === 'object');
-      const subObjects2 = keys2
-        .map(k => {
-          return { objs: (obj2 as any)[k] ?? {}, key: k };
-        })
-        .filter(x => typeof x.objs === 'object');
-
-      for (let i = 0; i < subObjects1.length; i++) {
-        const keyInObj = Object.keys(obj1).find(key => (obj1 as any)[key] === subObjects1[i].objs)!;
-        path.push(keyInObj);
-        getKeysMismatch(
-          subObjects1.find(x => x.key === keyInObj)!.objs,
-          subObjects2.find(x => x.key === keyInObj)!.objs,
-          path,
-          res
-        );
-        path.pop();
-      }
-
-      return res;
-    };
-
-    let foundMismatch = false;
+  private findMismatches(
+    translationCollection: TranslationCollection[],
+    handleMissingKey: (missingKey: string[], tc_existing: TranslationCollection, tc_missing: TranslationCollection) => void
+  ) {
     translationCollection.forEach(tC => {
       translationCollection.forEach(tC2 => {
         if (tC !== tC2) {
-          const missingKeys = getKeysMismatch(tC.translations, tC2.translations);
+          const missingKeys = this.getKeysMismatch(tC.translations, tC2.translations);
           missingKeys.forEach(missingKey => {
-            const msg = `Translation key '${missingKey.join('.')}' is missing from locale '${
-              tC2.locale
-            }' but present in '${this.formatPath(tC.path!)}' with value '${this.getValueForKey(missingKey, tC)}'`;
-            if (this.cfg.translationMismatchReport === 'error') {
-              this.loggerService.error(msg);
-              foundMismatch = true;
-            } else if (this.cfg.translationMismatchReport === 'off') {
-              this.loggerService.debug(msg);
-            } else {
-              this.loggerService.warn(msg);
-            }
+            handleMissingKey(missingKey, tC, tC2);
           });
         }
       });
     });
-    if (foundMismatch) {
-      return false;
+  }
+
+  private getKeysMismatch(obj1: object, obj2: object, path: string[] = [], res: string[][] = []) {
+    const keys1 = Object.keys(obj1);
+    const keys2 = Object.keys(obj2);
+    const missingKeys = keys1.filter(x => !keys2.some(y => y === x));
+
+    res.push(...missingKeys.filter(mK => typeof (obj1 as any)[mK] === 'string').map(mK => [...path, mK]));
+
+    // Re-adding the missing keys to report further missing translation values down that branch
+    keys2.push(...missingKeys);
+    const subObjects1 = keys1
+      .map(k => {
+        return { objs: (obj1 as any)[k], key: k };
+      })
+      .filter(x => typeof x.objs === 'object');
+    const subObjects2 = keys2
+      .map(k => {
+        return { objs: (obj2 as any)[k] ?? {}, key: k };
+      })
+      .filter(x => typeof x.objs === 'object');
+
+    for (let i = 0; i < subObjects1.length; i++) {
+      const keyInObj = Object.keys(obj1).find(key => (obj1 as any)[key] === subObjects1[i].objs)!;
+      path.push(keyInObj);
+      this.getKeysMismatch(
+        subObjects1.find(x => x.key === keyInObj)!.objs,
+        subObjects2.find(x => x.key === keyInObj)!.objs,
+        path,
+        res
+      );
+      path.pop();
     }
 
-    await this.fileSystemService.ensureDirectory(destinationPath);
-
-    const savePromises = translationCollection.map(x => {
-      const filePath = this.fileSystemService.join(destinationPath, `${x.locale}.json`);
-      return this.fileSystemService.saveObjectToFile(filePath, x.translations, true);
-    });
-    await Promise.all(savePromises);
-    this.loggerService.success('Translation files merged successfully!');
-
-    return true;
+    return res;
   }
 
   private formatPath(path: string) {
@@ -232,5 +260,48 @@ export class TranslationMerger extends GahPlugin {
       val = val[keyPathSegment];
     }
     return val as string;
+  }
+
+  private async fixTranslationMismatch() {
+    const destinationPath = this.fileSystemService.join('.gah', this.cfg.destinationPath);
+
+    const translationCollection = await this.readTranslations(destinationPath);
+    if (!translationCollection) {
+      return false;
+    }
+
+    this.findMismatches(translationCollection, (missingKey, tc_existing, tc_missing) => {
+      let missingObj = tc_missing.translations;
+      for (let i = 0; i < missingKey.length; i++) {
+        const keySegment = missingKey[i];
+        missingObj[keySegment] ??= {};
+        if (i === missingKey.length - 1) {
+          missingObj[keySegment] = `### MISSING TRANSLATION: '${missingKey.join('.')}' ###`;
+        } else {
+          missingObj = missingObj[keySegment];
+        }
+      }
+    });
+
+    for (const tC of translationCollection) {
+      const sortedTranslations = this.sortObjectByKeys(tC.translations);
+      await this.fileSystemService.saveObjectToFile(tC.path!, sortedTranslations);
+    }
+  }
+
+  private sortObjectByKeys(obj: any) {
+    const objCopy = JSON.parse(JSON.stringify(obj));
+    const keys = Object.keys(objCopy);
+    keys.sort();
+    const newObj: any = {};
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      if (typeof newObj[key] === 'object') {
+        newObj[key] = this.sortObjectByKeys(newObj[key]);
+      } else {
+        newObj[key] = objCopy[key];
+      }
+    }
+    return newObj;
   }
 }
