@@ -147,16 +147,12 @@ export class TranslationMerger extends GahPlugin {
       }
     }
 
-    const getKeysMismatch = (obj1: object, obj2: object, path: string[] = [], res: string[] = []) => {
+    const getKeysMismatch = (obj1: object, obj2: object, path: string[] = [], res: string[][] = []) => {
       const keys1 = Object.keys(obj1);
       const keys2 = Object.keys(obj2);
       const missingKeys = keys1.filter(x => !keys2.some(y => y === x));
 
-      res.push(
-        ...missingKeys
-          .filter(mK => typeof (obj1 as any)[mK] === 'string')
-          .map(mK => (path.length > 0 ? path.join('.') + '.' : '') + mK)
-      );
+      res.push(...missingKeys.filter(mK => typeof (obj1 as any)[mK] === 'string').map(mK => [...path, mK]));
 
       // Re-adding the missing keys to report further missing translation values down that branch
       keys2.push(...missingKeys);
@@ -192,9 +188,9 @@ export class TranslationMerger extends GahPlugin {
         if (tC !== tC2) {
           const missingKeys = getKeysMismatch(tC.translations, tC2.translations);
           missingKeys.forEach(missingKey => {
-            const msg = `Translation key '${missingKey}' is missing from locale '${tC2.locale}' but present in '${this.formatPath(
-              tC.path!
-            )}' with value '${this.getValueForKey(missingKey, tC)}'`;
+            const msg = `Translation key '${missingKey.join('.')}' is missing from locale '${
+              tC2.locale
+            }' but present in '${this.formatPath(tC.path!)}' with value '${this.getValueForKey(missingKey, tC)}'`;
             if (this.cfg.translationMismatchReport === 'error') {
               this.loggerService.error(msg);
               foundMismatch = true;
@@ -230,10 +226,9 @@ export class TranslationMerger extends GahPlugin {
     return res;
   }
 
-  private getValueForKey(missingKey: string, tC: TranslationCollection) {
-    const keyPath = missingKey.split('.');
+  private getValueForKey(missingKey: string[], tC: TranslationCollection) {
     let val: any = tC.translations;
-    for (const keyPathSegment of keyPath) {
+    for (const keyPathSegment of missingKey) {
       val = val[keyPathSegment];
     }
     return val as string;
