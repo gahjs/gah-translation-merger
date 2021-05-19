@@ -323,11 +323,18 @@ export class TranslationMerger extends GahPlugin {
       }
     }
   }
-  matchTranslationCollectionsByPath(translationCollection: TranslationCollection[]): TranslationCollection[][] {
+
+  private matchTranslationCollectionsByPath(translationCollection: TranslationCollection[]): TranslationCollection[][] {
     const r = new Array<TranslationCollection[]>();
 
+    const pathMatch = (p: string) => {
+      const a = p.split('/');
+      a.pop();
+      return a.join('/');
+    };
+
     translationCollection.forEach(tC => {
-      const f = r.find(x => x.some(y => y.path === tC.path));
+      const f = r.find(x => x.some(y => pathMatch(y.path!) === pathMatch(tC.path!)));
       if (f) {
         f.push(tC);
       } else {
