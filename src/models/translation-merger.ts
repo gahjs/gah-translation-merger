@@ -151,7 +151,7 @@ export class TranslationMerger extends GahPlugin {
       const modDetails = mismatch.details[mod];
       const locales = modDetails.keysMissingInLocales;
       locales.forEach(locale => {
-        msg += `     locale ${chalk.yellow(locale)} is missing ${chalk.yellow(
+        msg += `     locale ${chalk.yellow(locale)} is missing ${chalk.red(
           modDetails.missingKeys.filter(x => x.languagesMissing.includes(locale)).length
         )} translations\n`;
       });
