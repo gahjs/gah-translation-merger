@@ -4,6 +4,8 @@ import { GahModuleType, GahPlugin, GahPluginConfig } from '@gah/shared';
 
 import { TranslationManagerConfig } from './translation-manager-config';
 import { TranslationCollection } from './translation-collection';
+import { MissingKeysDetails } from './missing-key-details';
+import chalk from 'chalk';
 
 export class TranslationMerger extends GahPlugin {
   constructor() {
@@ -121,24 +123,11 @@ export class TranslationMerger extends GahPlugin {
 
     const mergedTranslationCollection = this.mergeTranslationCollectionsByLocale(translationCollection);
 
-    let foundMismatch = false;
-    this.findMismatches(mergedTranslationCollection, (missingKey, tc_existing, tc_missing) => {
-      const msg = `Translation key '${missingKey.join('.')}' is missing from locale '${
-        tc_missing.locale
-      }' but present in locale '${this.formatPath(tc_existing.locale)}' with value '${this.getValueForKey(
-        missingKey,
-        tc_existing
-      )}'`;
-      if (this.cfg.translationMismatchReport === 'error') {
-        this.loggerService.error(msg);
-        foundMismatch = true;
-      } else if (this.cfg.translationMismatchReport === 'off') {
-        this.loggerService.debug(msg);
-      } else {
-        this.loggerService.warn(msg);
-      }
-    });
-    if (foundMismatch) {
+    const mismatch = this.findMismatches(mergedTranslationCollection);
+
+    const terminate = this.handleKeyMismatch(mismatch);
+
+    if (terminate) {
       return false;
     }
 
@@ -151,6 +140,36 @@ export class TranslationMerger extends GahPlugin {
     await Promise.all(savePromises);
     this.loggerService.success('Translation files merged successfully!');
 
+    return true;
+  }
+
+  private handleKeyMismatch(mismatch: MissingKeysDetails): boolean {
+    const msgs: string[] = [];
+
+    mismatch.modulesWithMissingKeys.forEach(mod => {
+      let msg = `Module: ${chalk.yellow(mod)} is missing translations:\n`;
+      const modDetails = mismatch.details[mod];
+      const locales = modDetails.keysMissingInLocales;
+      locales.forEach(locale => {
+        msg += `     locale ${chalk.yellow(locale)} is missing ${chalk.yellow(
+          modDetails.missingKeys.filter(x => x.languagesMissing.includes(locale)).length
+        )} translations\n`;
+      });
+      msgs.push(msg);
+    });
+
+    if (this.cfg.translationMismatchReportFile) {
+      this.fileSystemService.saveObjectToFile(this.cfg.translationMismatchReportFile, mismatch);
+    }
+
+    if (this.cfg.translationMismatchReport === 'error') {
+      msgs.forEach(msg => this.loggerService.error(msg));
+      return false;
+    } else if (this.cfg.translationMismatchReport === 'off') {
+      msgs.forEach(msg => this.loggerService.debug(msg));
+    } else {
+      msgs.forEach(msg => this.loggerService.warn(msg));
+    }
     return true;
   }
 
@@ -229,18 +248,55 @@ export class TranslationMerger extends GahPlugin {
 
   private findMismatches(
     translationCollection: TranslationCollection[],
-    handleMissingKey: (missingKey: string[], tc_existing: TranslationCollection, tc_missing: TranslationCollection) => void
-  ) {
-    translationCollection.forEach(tC => {
-      translationCollection.forEach(tC2 => {
-        if (tC !== tC2) {
-          const missingKeys = this.getKeysMismatch(tC.translations, tC2.translations);
+    handleMissingKey?: (missingKey: string[], tc_existing: TranslationCollection, tc_missing: TranslationCollection) => void
+  ): MissingKeysDetails {
+    const missingKeyDetailsObject: MissingKeysDetails = {
+      hasMissingKeys: false,
+      modulesWithMissingKeys: [],
+      details: {}
+    };
+
+    translationCollection.forEach(tC_existing => {
+      translationCollection.forEach(tC_missing => {
+        if (tC_existing !== tC_missing) {
+          const missingKeys = this.getKeysMismatch(tC_existing.translations, tC_missing.translations);
           missingKeys.forEach(missingKey => {
-            handleMissingKey(missingKey, tC, tC2);
+            handleMissingKey?.(missingKey, tC_existing, tC_missing);
+            missingKeyDetailsObject.hasMissingKeys = true;
+            const moduleName = missingKey[0];
+            if (!missingKeyDetailsObject.modulesWithMissingKeys.includes(moduleName)) {
+              missingKeyDetailsObject.modulesWithMissingKeys.push(moduleName);
+              missingKeyDetailsObject.details[moduleName] = {
+                keysMissingInLocales: [],
+                count: 0,
+                missingKeys: []
+              };
+            }
+            missingKeyDetailsObject.details[moduleName].count++;
+            const keyName = missingKey.join('.');
+            this.addToArray(missingKeyDetailsObject.details[moduleName].keysMissingInLocales, tC_missing.locale);
+            if (!missingKeyDetailsObject.details[moduleName].missingKeys.some(x => x.key === keyName)) {
+              missingKeyDetailsObject.details[moduleName].missingKeys.push({
+                key: keyName,
+                existingValues: [],
+                languagesExisting: [],
+                languagesMissing: []
+              });
+            }
+            const missingKeyDetails = missingKeyDetailsObject.details[moduleName].missingKeys.find(x => x.key === keyName)!;
+            this.addToArray(missingKeyDetails.languagesExisting, tC_existing.locale);
+            this.addToArray(missingKeyDetails.languagesMissing, tC_missing.locale);
           });
         }
       });
     });
+    return missingKeyDetailsObject;
+  }
+
+  private addToArray<T>(array: T[], value: T) {
+    if (!array.includes(value)) {
+      array.push(value);
+    }
   }
 
   private getKeysMismatch(obj1: object, obj2: object, path: string[] = [], res: string[][] = []) {

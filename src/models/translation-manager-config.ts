@@ -6,4 +6,5 @@ export class TranslationManagerConfig extends GahPluginConfig {
   public localeRegexPattern: string;
   public prefixRegexPattern: string;
   public translationMismatchReport: 'error' | 'warn' | 'off';
+  public translationMismatchReportFile: string;
 }
