@@ -125,9 +125,9 @@ export class TranslationMerger extends GahPlugin {
 
     const mismatch = this.findMismatches(mergedTranslationCollection);
 
-    const terminate = this.handleKeyMismatch(mismatch);
+    const success = this.handleKeyMismatch(mismatch);
 
-    if (terminate) {
+    if (!success) {
       return false;
     }
 
