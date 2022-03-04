@@ -1,3 +1,10 @@
+import { ReportType } from './translation-manager-config';
+
+export interface MissingKeyReportSet {
+  reportType: ReportType;
+  details: MissingKeysDetails;
+}
+
 export interface MissingKeysDetails {
   hasMissingKeys: boolean;
   modulesWithMissingKeys: string[];

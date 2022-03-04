@@ -2,9 +2,9 @@ import path from 'path';
 
 import { GahModuleType, GahPlugin, GahPluginConfig } from '@gah/shared';
 
-import { TranslationManagerConfig } from './translation-manager-config';
+import { ReportType, TranslationManagerConfig } from './translation-manager-config';
 import { TranslationCollection } from './translation-collection';
-import { MissingKeysDetails } from './missing-key-details';
+import { MissingKeyReportSet, MissingKeysDetails } from './missing-key-details';
 import chalk from 'chalk';
 
 export class TranslationMerger extends GahPlugin {
@@ -123,9 +123,9 @@ export class TranslationMerger extends GahPlugin {
 
     const mergedTranslationCollection = this.mergeTranslationCollectionsByLocale(translationCollection);
 
-    const mismatch = this.findMismatches(mergedTranslationCollection);
+    const mismatches = this.findMismatches(mergedTranslationCollection);
 
-    const success = this.handleKeyMismatch(mismatch);
+    const success = this.handleKeyMismatch(mismatches);
 
     if (!success) {
       return false;
@@ -143,7 +143,7 @@ export class TranslationMerger extends GahPlugin {
     return true;
   }
 
-  private handleKeyMismatch(mismatch: MissingKeysDetails): boolean {
+  private prepareMismatchMessages(mismatch: MissingKeysDetails) {
     const msgs: string[] = [];
 
     mismatch.modulesWithMissingKeys.forEach(mod => {
@@ -157,20 +157,60 @@ export class TranslationMerger extends GahPlugin {
       });
       msgs.push(msg);
     });
+    return msgs;
+  }
 
-    if (this.cfg.translationMismatchReportFile) {
-      this.fileSystemService.saveObjectToFile(this.cfg.translationMismatchReportFile, mismatch);
+  private mergeDeep(target: any, source: any) {
+    const isObject = (obj: any) => obj && typeof obj === 'object';
+
+    if (!isObject(target) || !isObject(source)) {
+      return source;
     }
 
-    if (this.cfg.translationMismatchReport === 'error') {
-      msgs.forEach(msg => this.loggerService.error(msg));
-      return false;
-    } else if (this.cfg.translationMismatchReport === 'off') {
-      msgs.forEach(msg => this.loggerService.debug(msg));
-    } else {
-      msgs.forEach(msg => this.loggerService.warn(msg));
+    Object.keys(source).forEach(key => {
+      const targetValue = target[key];
+      const sourceValue = source[key];
+
+      if (Array.isArray(targetValue) && Array.isArray(sourceValue)) {
+        target[key] = targetValue.concat(sourceValue);
+      } else if (isObject(targetValue) && isObject(sourceValue)) {
+        target[key] = this.mergeDeep(Object.assign({}, targetValue), sourceValue);
+      } else {
+        target[key] = sourceValue;
+      }
+    });
+
+    return target;
+  }
+
+  private handleKeyMismatch(mismatches: MissingKeyReportSet[]): boolean {
+    let failJob = false;
+    mismatches.forEach(x => {
+      const msgs = this.prepareMismatchMessages(x.details);
+      if (x.reportType === 'error') {
+        this.loggerService.error('ERROR: missing translations found');
+        msgs.forEach(msg => this.loggerService.error(msg));
+        failJob = true;
+      } else if (x.reportType === 'none') {
+        this.loggerService.debug('DEBUG: missing translations found');
+        msgs.forEach(msg => this.loggerService.debug(msg));
+      } else {
+        this.loggerService.warn('WARNING: missing translations found');
+        msgs.forEach(msg => this.loggerService.warn(msg));
+      }
+    });
+
+    if (this.cfg.mismatchConfig?.reportFile) {
+      let mergedMismatches: MissingKeysDetails = {} as MissingKeysDetails;
+      const hasMissingKeys = mismatches.some(x => x.details.hasMissingKeys);
+      mismatches.forEach(x => {
+        mergedMismatches = this.mergeDeep(mergedMismatches, x.details);
+        mergedMismatches.hasMissingKeys = hasMissingKeys;
+      });
+      this.fileSystemService.saveObjectToFile(this.cfg.mismatchConfig.reportFile, mergedMismatches);
     }
-    return true;
+
+    return !failJob;
   }
 
   private mergeTranslationCollectionsByLocale(translationCollection: TranslationCollection[]) {
@@ -246,15 +286,31 @@ export class TranslationMerger extends GahPlugin {
     return translationCollection;
   }
 
+  private getReportType(moduleName: string, locale: string): ReportType {
+    const globalConfig = this.cfg.mismatchConfig;
+    if (!globalConfig) {
+      return 'error';
+    }
+    const moduleSpecificConfig =
+      globalConfig.mismatchConfigForModule?.[moduleName] ?? globalConfig.mismatchConfigForModule?.['*'];
+    if (!moduleSpecificConfig) {
+      return globalConfig.reportLevel ?? 'error';
+    }
+    const localeConfig =
+      moduleSpecificConfig.find(x => x.locales.includes(locale)) ?? moduleSpecificConfig.find(x => x.locales.includes('*'));
+
+    if (!localeConfig) {
+      return globalConfig.reportLevel ?? 'error';
+    }
+
+    return localeConfig.reportLevel;
+  }
+
   private findMismatches(
     translationCollection: TranslationCollection[],
     handleMissingKey?: (missingKey: string[], tc_existing: TranslationCollection, tc_missing: TranslationCollection) => void
-  ): MissingKeysDetails {
-    const missingKeyDetailsObject: MissingKeysDetails = {
-      hasMissingKeys: false,
-      modulesWithMissingKeys: [],
-      details: {}
-    };
+  ): MissingKeyReportSet[] {
+    const missingKeyReportSets: MissingKeyReportSet[] = [];
 
     translationCollection.forEach(tC_existing => {
       translationCollection.forEach(tC_missing => {
@@ -262,8 +318,24 @@ export class TranslationMerger extends GahPlugin {
           const missingKeys = this.getKeysMismatch(tC_existing.translations, tC_missing.translations);
           missingKeys.forEach(missingKey => {
             handleMissingKey?.(missingKey, tC_existing, tC_missing);
-            missingKeyDetailsObject.hasMissingKeys = true;
             const moduleName = missingKey[0];
+            const reportType = this.getReportType(moduleName, tC_missing.locale);
+            let missingKeyDetailsObject = missingKeyReportSets.find(x => x.reportType === reportType)?.details;
+            if (!missingKeyDetailsObject) {
+              missingKeyDetailsObject = {
+                hasMissingKeys: false,
+                modulesWithMissingKeys: [],
+                details: {}
+              };
+              missingKeyReportSets.push({
+                reportType,
+                details: missingKeyDetailsObject
+              });
+            }
+
+            if (reportType === 'error' || reportType === 'warn') {
+              missingKeyDetailsObject.hasMissingKeys = true;
+            }
             if (!missingKeyDetailsObject.modulesWithMissingKeys.includes(moduleName)) {
               missingKeyDetailsObject.modulesWithMissingKeys.push(moduleName);
               missingKeyDetailsObject.details[moduleName] = {
@@ -290,7 +362,7 @@ export class TranslationMerger extends GahPlugin {
         }
       });
     });
-    return missingKeyDetailsObject;
+    return missingKeyReportSets;
   }
 
   private addToArray<T>(array: T[], value: T) {
@@ -332,21 +404,6 @@ export class TranslationMerger extends GahPlugin {
     }
 
     return res;
-  }
-
-  private formatPath(path: string) {
-    const shortedPath = path?.replace('.gah/src/assets/', '');
-    const pathSegments = shortedPath.split('/');
-    const res = '[' + pathSegments.splice(0, 1)[0] + ']/' + pathSegments.join('/');
-    return res;
-  }
-
-  private getValueForKey(missingKey: string[], tC: TranslationCollection) {
-    let val: any = tC.translations;
-    for (const keyPathSegment of missingKey) {
-      val = val[keyPathSegment];
-    }
-    return val as string;
   }
 
   private async fixTranslationMismatch() {
