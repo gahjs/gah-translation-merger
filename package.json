@@ -1,6 +1,6 @@
 {
   "name": "@awdware/gah-translation-merger",
-  "version": "4.0.0-rc5",
+  "version": "4.0.0",
   "description": "Merging multiple tranlation files into one during install step of GAH-CLI",
   "main": "./lib/index.js",
   "scripts": {
