@@ -18,6 +18,7 @@
     "chalk": "^4.0.0"
   },
   "devDependencies": {
+    "@awdware/eslint-config-base": "^1.0.0",
     "@awdware/eslint-config-nodejs": "^0.0.8",
     "@awdware/prettier-config": "^0.0.2",
     "@types/node": "^16.0.0",

@@ -2,6 +2,11 @@
 # yarn lockfile v1
 
 
+"@awdware/eslint-config-base@^1.0.0":
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/@awdware/eslint-config-base/-/eslint-config-base-1.0.0.tgz#7935fe5613266f2c41c4d13276404300ed44c3f8"
+  integrity sha512-PxzyJboFttYp/7dakC8++eQRjsC7t0tnnommXygGz29YMsTLv7T1KaU4LH/g6eWk8nA5lib8ld4TOpbJSnipCA==
+
 "@awdware/eslint-config-nodejs@^0.0.8":
   version "0.0.8"
   resolved "https://registry.yarnpkg.com/@awdware/eslint-config-nodejs/-/eslint-config-nodejs-0.0.8.tgz#a906ca58b09caa133d5a16d0609f84bc7dd59255"
