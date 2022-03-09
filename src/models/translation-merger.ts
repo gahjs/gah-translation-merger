@@ -202,8 +202,9 @@ export class TranslationMerger extends GahPlugin {
 
     if (this.cfg.mismatchConfig?.reportFile) {
       let mergedMismatches: MissingKeysDetails = {} as MissingKeysDetails;
-      const hasMissingKeys = mismatches.filter(x => x.reportType !== 'none').some(x => x.details.hasMissingKeys);
-      mismatches.forEach(x => {
+      const importantMismatches = mismatches.filter(x => x.reportType !== 'none');
+      const hasMissingKeys = importantMismatches.some(x => x.details.hasMissingKeys);
+      importantMismatches.forEach(x => {
         mergedMismatches = this.mergeDeep(mergedMismatches, x.details);
         mergedMismatches.hasMissingKeys = hasMissingKeys;
       });
